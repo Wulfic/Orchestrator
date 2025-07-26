@@ -1,8 +1,31 @@
+class OrchestratorViewProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
+  private _onDidChangeTreeData: vscode.EventEmitter<vscode.TreeItem | undefined | void> = new vscode.EventEmitter<vscode.TreeItem | undefined | void>();
+  readonly onDidChangeTreeData: vscode.Event<vscode.TreeItem | undefined | void> = this._onDidChangeTreeData.event;
+
+  getTreeItem(element: vscode.TreeItem): vscode.TreeItem {
+    return element;
+  }
+
+  getChildren(element?: vscode.TreeItem): vscode.ProviderResult<vscode.TreeItem[]> {
+    if (!element) {
+      return [
+        new vscode.TreeItem('Run Orchestrator Workflow', vscode.TreeItemCollapsibleState.None),
+        new vscode.TreeItem('Show Copilot Output', vscode.TreeItemCollapsibleState.None)
+      ];
+    }
+    return [];
+  }
+}
 
 import * as vscode from 'vscode';
 import { OrchestratorAgent, queryLmStudio, writeCopilotOutput, readCopilotOutput } from './orchestratorAgent';
 
 export function activate(context: vscode.ExtensionContext) {
+  // Register Orchestrator sidebar view
+  const viewProvider = new OrchestratorViewProvider();
+  context.subscriptions.push(
+    vscode.window.registerTreeDataProvider('orchestratorView', viewProvider)
+  );
   // Create orchestrator instance
   const orchestrator = new OrchestratorAgent();
 

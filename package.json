@@ -4,7 +4,9 @@
   "description": "A VS Code extension for orchestration tasks.",
   "version": "0.0.1",
   "publisher": "wulfic",
-  "engines": {},
+  "engines": {
+    "vscode": "^1.80.0"
+  },
   "categories": [
     "Other"
   ],
@@ -17,8 +19,29 @@
       {
         "command": "orchestrator.helloWorld",
         "title": "Hello World from Orchestrator"
+      },
+      {
+        "command": "orchestrator.runFlow",
+        "title": "Run Orchestrator Workflow"
       }
-    ]
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "orchestrator-sidebar",
+          "title": "Orchestrator",
+          "icon": "resources/orchestrator.svg"
+        }
+      ]
+    },
+    "views": {
+      "orchestrator-sidebar": [
+        {
+          "id": "orchestratorView",
+          "name": "Orchestrator Control"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
