@@ -1,0 +1,33 @@
+{
+  "name": "orchestrator-extension",
+  "displayName": "Orchestrator Extension",
+  "description": "A VS Code extension for orchestration tasks.",
+  "version": "0.0.1",
+  "publisher": "wulfic",
+  "engines": {},
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:orchestrator.helloWorld"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "orchestrator.helloWorld",
+        "title": "Hello World from Orchestrator"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}
