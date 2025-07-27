@@ -11,15 +11,14 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:orchestrator.helloWorld"
+    "*",
+    "onView:orchestratorChatView",
+    "onCommand:orchestrator.runFlow",
+    "onCommand:orchestrator.openLmStudioPanel"
   ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      {
-        "command": "orchestrator.helloWorld",
-        "title": "Hello World from Orchestrator"
-      },
       {
         "command": "orchestrator.runFlow",
         "title": "Run Orchestrator Workflow"
@@ -37,8 +36,9 @@
     "views": {
       "orchestrator-sidebar": [
         {
-          "id": "orchestratorView",
-          "name": "Orchestrator Control"
+          "id": "orchestratorChatView",
+          "name": "Orchestrator Chat",
+          "when": "true"
         }
       ]
     }

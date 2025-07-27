@@ -35,9 +35,148 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
+class OrchestratorChatViewProvider {
+    constructor(context) {
+        this.context = context;
+    }
+    resolveWebviewView(webviewView) {
+        this._view = webviewView;
+        webviewView.webview.options = {
+            enableScripts: true
+        };
+        webviewView.webview.html = this.getHtml();
+        // Handle messages from the webview
+        webviewView.webview.onDidReceiveMessage(async (message) => {
+            if (message.command === 'send') {
+                const userInput = message.text;
+                // Run orchestrator steps using the input as a prompt for the first step
+                try {
+                    // Create a new orchestrator instance for each chat session
+                    const orchestrator = new orchestratorAgent_1.OrchestratorAgent();
+                    orchestrator.addStep('Query LM Studio', async () => {
+                        try {
+                            const response = await (0, orchestratorAgent_1.queryLmStudio)(userInput);
+                            const code = response?.choices?.[0]?.message?.content || 'No output';
+                            (0, orchestratorAgent_1.writeCopilotOutput)('copilot_output.json', { copilot_output: [code] });
+                            return code;
+                        }
+                        catch (err) {
+                            return { error: err?.message || String(err) };
+                        }
+                    });
+                    orchestrator.addStep('Read Copilot output', async () => {
+                        try {
+                            const data = (0, orchestratorAgent_1.readCopilotOutput)('copilot_output.json');
+                            return data;
+                        }
+                        catch (err) {
+                            return { error: err?.message || String(err) };
+                        }
+                    }, { dependencies: [0] });
+                    orchestrator.addStep('Validate output contains TypeScript function', async () => {
+                        try {
+                            const data = (0, orchestratorAgent_1.readCopilotOutput)('copilot_output.json');
+                            const valid = Array.isArray(data?.copilot_output) && data.copilot_output.some((entry) => entry.includes('function'));
+                            return valid;
+                        }
+                        catch (err) {
+                            return { error: err?.message || String(err) };
+                        }
+                    }, { dependencies: [1] });
+                    // Run all steps and collect results
+                    const results = await orchestrator.runAllSteps();
+                    let output = '';
+                    results.forEach((result, idx) => {
+                        output += `<b>Step ${idx + 1}:</b> ` + (typeof result === 'object' ? JSON.stringify(result) : result) + '<br>';
+                    });
+                    webviewView.webview.postMessage({ command: 'output', text: output });
+                }
+                catch (err) {
+                    webviewView.webview.postMessage({ command: 'output', text: 'Error: ' + (err?.message || String(err)) });
+                }
+            }
+            else if (message.command === 'clear') {
+                webviewView.webview.postMessage({ command: 'clear' });
+            }
+        });
+    }
+    getHtml() {
+        return `
+      <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        #output { height: 220px; overflow-y: auto; background: #f5f5f5; padding: 8px; border-bottom: 1px solid #ddd; }
+        #inputRow { display: flex; padding: 8px; background: #fff; }
+        #chatInput { flex: 1; padding: 6px; font-size: 1em; }
+        #sendBtn, #clearBtn { margin-left: 8px; padding: 6px 12px; font-size: 1em; }
+      </style>
+      <div id="modelStatus">Model: <span id="modelName">(default)</span> <button id="refreshModel">Refresh</button></div>
+      <div id="output"></div>
+      <div id="inputRow">
+        <select id="modelSelect">
+          <option value="oh-dcft-v3.1-claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+          <option value="other-model">Other Model</option>
+        </select>
+        <input id="chatInput" type="text" placeholder="Type your message..." />
+        <button id="sendBtn">Send</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+      <script>
+        const vscode = acquireVsCodeApi();
+        const outputDiv = document.getElementById('output');
+      const modelSelect = document.getElementById('modelSelect');
+      const modelNameSpan = document.getElementById('modelName');
+      document.getElementById('refreshModel').onclick = () => {
+        vscode.postMessage({ command: 'refreshModel' });
+      };
+        document.getElementById('sendBtn').onclick = () => {
+          const text = document.getElementById('chatInput').value;
+          const model = modelSelect.value;
+          if (text.trim()) {
+            vscode.postMessage({ command: 'send', text, model });
+            document.getElementById('chatInput').value = '';
+          }
+        };
+        document.getElementById('clearBtn').onclick = () => {
+          vscode.postMessage({ command: 'clear' });
+        };
+        window.addEventListener('message', event => {
+          const msg = event.data;
+          if (msg.command === 'output') {
+            const p = document.createElement('div');
+            p.textContent = msg.text;
+            outputDiv.appendChild(p);
+            outputDiv.scrollTop = outputDiv.scrollHeight;
+          } else if (msg.command === 'modelStatus') {
+            modelNameSpan.textContent = msg.model || '(default)';
+          } else if (msg.command === 'clear') {
+            outputDiv.innerHTML = '';
+          }
+        });
+      </script>
+    `;
+    }
+}
+OrchestratorChatViewProvider.viewType = 'orchestratorChatView';
 const vscode = __importStar(require("vscode"));
 const orchestratorAgent_1 = require("./orchestratorAgent");
 function activate(context) {
+    console.log('Orchestrator extension activated');
+    // Register Orchestrator chat sidebar view
+    const provider = new OrchestratorChatViewProvider(context);
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(OrchestratorChatViewProvider.viewType, provider));
+    console.log('OrchestratorChatViewProvider registered:', OrchestratorChatViewProvider.viewType);
+    // Register LM Studio panel command
+    context.subscriptions.push(vscode.commands.registerCommand('orchestrator.openLmStudioPanel', () => {
+        const panel = vscode.window.createWebviewPanel('lmStudioPanel', 'LM Studio Panel', vscode.ViewColumn.One, { enableScripts: true });
+        panel.webview.html = `<html><body><h2>LM Studio Panel</h2><div id='output'></div><input id='prompt' type='text' placeholder='Prompt...'><button onclick='sendPrompt()'>Send</button><script>const vscode = acquireVsCodeApi();function sendPrompt(){const prompt=document.getElementById('prompt').value;vscode.postMessage({type:'sendPrompt',prompt});}window.addEventListener('message',event=>{if(event.data.type==='response'){document.getElementById('output').textContent=event.data.data;}});</script></body></html>`;
+        panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type === 'sendPrompt') {
+                // Call LM Studio backend here
+                const response = await require('./orchestratorAgent').queryLmStudio(message.prompt);
+                panel.webview.postMessage({ type: 'response', data: JSON.stringify(response) });
+            }
+        });
+    }));
     // Create orchestrator instance
     const orchestrator = new orchestratorAgent_1.OrchestratorAgent();
     // Add steps (same as before)
