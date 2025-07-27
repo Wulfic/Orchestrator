@@ -36,41 +36,146 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const lmstudioClient_1 = require("./lmstudioClient");
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 function activate(context) {
     console.log('Orchestrator extension: activate() called');
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider('orchestratorChatView2', new SimpleSidebarProvider(context)));
+    // Instantiate the agent
+    const agent = new OrchestratorAgent(context);
+    // Register a command to kick off the workflow
+    context.subscriptions.push(vscode.commands.registerCommand('orchestrator.runWorkflow', async () => {
+        await agent.runWorkflow();
+    }));
 }
-class SimpleSidebarProvider {
+function deactivate() {
+    console.log('Orchestrator extension: deactivate() called');
+}
+class OrchestratorAgent {
     constructor(context) {
         this.context = context;
+        this.steps = [];
+        this.currentStep = 0;
+        this.log = [];
+        // Store state in the extension's global storage folder
+        this.stateFile = path.join(this.context.globalStorageUri.fsPath, 'orchestrator_state.json');
+        this.ensureStorageDir();
+        this.loadState();
+        this.lmStudioClient = new lmstudioClient_1.LMStudioClient('http://localhost:1234/v1/completions');
+        this.setupSteps();
     }
-    resolveWebviewView(webviewView, context, token) {
-        webviewView.webview.options = { enableScripts: true };
-        webviewView.webview.html = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Orchestrator Chat</title>
-      </head>
-      <body>
-        <h2>Orchestrator Chat</h2>
-        <div id="output">Welcome to Orchestrator!</div>
-        <input id="chatInput" type="text" placeholder="Type a message..." />
-        <button id="sendBtn">Send</button>
-        <script>
-          const vscode = acquireVsCodeApi();
-          document.getElementById('sendBtn').onclick = () => {
-            const text = document.getElementById('chatInput').value;
-            document.getElementById('output').textContent = 'You said: ' + text;
-            vscode.postMessage({ command: 'send', text });
-          };
-        </script>
-      </body>
-      </html>
-    `;
+    ensureStorageDir() {
+        try {
+            fs.mkdirSync(path.dirname(this.stateFile), { recursive: true });
+        }
+        catch {
+            // directory already exists
+        }
+    }
+    loadState() {
+        if (fs.existsSync(this.stateFile)) {
+            try {
+                const raw = fs.readFileSync(this.stateFile, 'utf8');
+                const state = JSON.parse(raw);
+                this.currentStep = state.currentStep ?? 0;
+                this.log = state.log ?? [];
+            }
+            catch (err) {
+                console.error('Failed to load agent state:', err);
+            }
+        }
+    }
+    saveState() {
+        try {
+            const payload = {
+                currentStep: this.currentStep,
+                log: this.log,
+            };
+            fs.writeFileSync(this.stateFile, JSON.stringify(payload, null, 2), 'utf8');
+        }
+        catch (err) {
+            console.error('Failed to save agent state:', err);
+        }
+    }
+    setupSteps() {
+        this.steps = [
+            {
+                description: 'Query LM Studio for code generation',
+                action: async () => {
+                    const prompt = 'Generate a TypeScript function that adds two numbers.';
+                    const request = { prompt, max_tokens: 128 };
+                    const result = await this.lmStudioClient.generate(request);
+                    const response = result && result.choices?.[0]?.text?.trim() ? result.choices[0].text.trim() : '[No response]';
+                    const outPath = path.join(this.context.globalStorageUri.fsPath, 'copilot_output.json');
+                    this.writeCopilotOutput(outPath, { prompt, response });
+                    return response;
+                },
+            },
+            {
+                description: 'Read Copilot output',
+                action: async () => {
+                    const outPath = path.join(this.context.globalStorageUri.fsPath, 'copilot_output.json');
+                    return this.readCopilotOutput(outPath);
+                },
+            },
+            {
+                description: 'Validate/transform Copilot output',
+                action: async () => {
+                    const outPath = path.join(this.context.globalStorageUri.fsPath, 'copilot_output.json');
+                    const data = this.readCopilotOutput(outPath);
+                    if (data?.response &&
+                        typeof data.response === 'string' &&
+                        data.response.includes('function')) {
+                        return { valid: true, details: 'Contains function definition.' };
+                    }
+                    return { valid: false, details: 'No function found.' };
+                },
+            },
+        ];
+    }
+    readCopilotOutput(filePath) {
+        try {
+            const raw = fs.readFileSync(filePath, 'utf8');
+            return JSON.parse(raw);
+        }
+        catch (err) {
+            console.error('Error reading Copilot output:', err);
+            return null;
+        }
+    }
+    writeCopilotOutput(filePath, data) {
+        try {
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+            return true;
+        }
+        catch (err) {
+            console.error('Error writing Copilot output:', err);
+            return false;
+        }
+    }
+    async runWorkflow() {
+        vscode.window.showInformationMessage('Orchestrator workflow started.');
+        for (; this.currentStep < this.steps.length; this.currentStep++) {
+            const step = this.steps[this.currentStep];
+            let output;
+            let status = 'success';
+            try {
+                output = await step.action();
+            }
+            catch (err) {
+                output = err.message || err;
+                status = 'error';
+            }
+            this.log.push({
+                step: this.currentStep,
+                input: step.description,
+                output,
+                status,
+            });
+            this.saveState();
+            vscode.window.showInformationMessage(`Step ${this.currentStep + 1}: ${step.description} — ${status}`);
+        }
+        vscode.window.showInformationMessage('Orchestrator workflow completed.');
     }
 }
-function deactivate() { }
 //# sourceMappingURL=extension.js.map

@@ -11,7 +11,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:orchestratorChatView2"
+    "onView:orchestratorChatView2",
+    "onCommand:orchestrator.runFlow"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -35,7 +36,7 @@
         {
           "id": "orchestratorChatView2",
           "name": "Orchestrator Chat",
-          "when": "true"
+          "icon": "resources/orchestrator.svg"
         }
       ]
     }
@@ -48,6 +49,7 @@
   "devDependencies": {
     "@types/node": "^24.1.0",
     "@types/vscode": "^1.80.0",
+    "node-fetch": "^3.3.2",
     "typescript": "^5.0.0"
   }
 }
