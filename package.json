@@ -11,10 +11,7 @@
     "Other"
   ],
   "activationEvents": [
-    "*",
-    "onView:orchestratorChatView",
-    "onCommand:orchestrator.runFlow",
-    "onCommand:orchestrator.openLmStudioPanel"
+    "onView:orchestratorChatView2"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -27,16 +24,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "orchestrator-sidebar",
+          "id": "orchestrator-sidebar2",
           "title": "Orchestrator",
           "icon": "resources/orchestrator.svg"
         }
       ]
     },
     "views": {
-      "orchestrator-sidebar": [
+      "orchestrator-sidebar2": [
         {
-          "id": "orchestratorChatView",
+          "id": "orchestratorChatView2",
           "name": "Orchestrator Chat",
           "when": "true"
         }
